@@ -48,9 +48,13 @@
   <ItemGroup>
     <Compile Include="Enums\DpiType.cs" />
     <Compile Include="Enums\PROCESS_DPI_AWARENESS.cs" />
+    <Compile Include="MouseEvents.cs" />
     <Compile Include="MouseUnSnag.cs" />
+    <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SnagScreen.cs" />
     <Compile Include="Windows\Kernel32.cs" />
+    <Compile Include="Windows\MSLLHOOKSTRUCT.cs" />
     <Compile Include="Windows\SHCore.cs" />
     <Compile Include="Windows\User32.cs" />
   </ItemGroup>
