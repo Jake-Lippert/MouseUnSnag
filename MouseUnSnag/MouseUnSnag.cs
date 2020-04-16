@@ -5,7 +5,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Data.Linq;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
@@ -13,64 +12,14 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using MouseUnSnag.Enums;
+using MouseUnSnag.Windows;
 
-using static StaticStuff;
-using static SnagScreen;
-
+namespace MouseUnSnag
+{
 public static class StaticStuff
 {
-    // ============================================================================================
-    // Win32 interfaces.
-    //
-
-    public const int WH_MOUSE_LL = 14; // Win32 low-level mouse event hook ID.
-    public const int WM_MOUSEMOVE = 0x0200;
-
-    public delegate IntPtr HookProc (int nCode, uint wParam, IntPtr lParam);
-
-    [DllImport ("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    public static extern IntPtr SetWindowsHookEx (int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
-
-    [DllImport ("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    [
-        return :MarshalAs (UnmanagedType.Bool)
-    ]
-    public static extern bool UnhookWindowsHookEx (IntPtr hhk);
-
-    [DllImport ("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    public static extern IntPtr CallNextHookEx (IntPtr hhk, int nCode, uint wParam, IntPtr lParam);
-
-    [DllImport ("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    public static extern IntPtr GetModuleHandle (string lpModuleName);
-
-    [DllImport ("user32.dll")]
-    public static extern bool SetCursorPos (int X, int Y);
-    public static bool SetCursorPos (Point p) { return SetCursorPos (p.X, p.Y); }
-
-    [DllImport ("user32.dll")]
-    public static extern bool GetCursorPos (out Point lpPoint);
-    //public static Point? GetCursorPos() => GetCursorPos(out Point P) ? P : null;
-
-    [DllImport ("kernel32.dll")]
-    static extern uint GetLastError ();
-
-    [DllImport ("kernel32", SetLastError = true, CharSet = CharSet.Auto)]
-    public static extern IntPtr LoadLibrary (string fileName);
-
-    public delegate bool ConsoleEventDelegate (int eventType);
-
-    [DllImport ("kernel32.dll", SetLastError = true)]
-    public static extern bool SetConsoleCtrlHandler (ConsoleEventDelegate callback, bool add);
-
-    public enum PROCESS_DPI_AWARENESS
-    {
-        Process_DPI_Unaware = 0,
-        Process_System_DPI_Aware = 1,
-        Process_Per_Monitor_DPI_Aware = 2
-    }
-
-    [DllImport ("SHCore.dll", SetLastError = true)]
-    public static extern bool SetProcessDpiAwareness (PROCESS_DPI_AWARENESS awareness);
+    public static bool SetCursorPos (Point p) { return User32.SetCursorPos(p.X, p.Y); }
 
     [StructLayout (LayoutKind.Sequential)]
     public struct MSLLHOOKSTRUCT
@@ -82,36 +31,12 @@ public static class StaticStuff
         public IntPtr dwExtraInfo;
     }
 
-    [DllImport ("kernel32.dll")]
-    public static extern IntPtr GetConsoleWindow ();
-
-    [DllImport ("user32.dll")]
-    public static extern bool ShowWindow (IntPtr hWnd, int nCmdShow);
-
-    private const int SW_HIDE = 0;
-    private const int SW_SHOW = 5;
-
-    public enum DpiType
-    {
-        Effective = 0,
-        Angular = 1,
-        Raw = 2,
-    }
-
-    //https://msdn.microsoft.com/en-us/library/windows/desktop/dd145062(v=vs.85).aspx
-    [DllImport ("User32.dll")]
-    public static extern IntPtr MonitorFromPoint ([In] System.Drawing.Point pt, [In] uint dwFlags);
-
-    //https://msdn.microsoft.com/en-us/library/windows/desktop/dn280510(v=vs.85).aspx
-    [DllImport ("Shcore.dll")]
-    public static extern IntPtr GetDpiForMonitor ([In] IntPtr hmonitor, [In] DpiType dpiType, [Out] out uint dpiX, [Out] out uint dpiY);
-
     public static uint GetDpi (Screen screen, DpiType dpiType)
     {
         try
         {
-            var mon = MonitorFromPoint (screen.Bounds.Location, 2 /*MONITOR_DEFAULTTONEAREST*/ );
-            GetDpiForMonitor (mon, dpiType, out uint dpiX, out uint dpiY);
+            var mon = User32.MonitorFromPoint (screen.Bounds.Location, 2 /*MONITOR_DEFAULTTONEAREST*/ );
+            SHCore.GetDpiForMonitor (mon, dpiType, out uint dpiX, out uint dpiY);
             return dpiX;
         }
         catch (System.DllNotFoundException)
@@ -271,13 +196,13 @@ public class SnagScreen
 
         foreach (var S in All)
         {
-            var DPIEffective = GetDpi (S.screen, DpiType.Effective);
+            var DPIEffective = StaticStuff.GetDpi (S.screen, DpiType.Effective);
             var R = S.R;
 
             Console.WriteLine (
                 $"   {i}: ({R.Left},{R.Top})-({R.Right},{R.Bottom})   Size:({R.Width},{R.Height}) "+
                 $"L({AsString(S.ToLeft)}),R({AsString(S.ToRight)}),A({AsString(S.Above)}),B({AsString(S.Below)})    "+
-                $"DPI(Raw/Eff/Ang): {GetDpi(S.screen, DpiType.Raw)}/{DPIEffective}/{GetDpi(S.screen, DpiType.Angular)}  "+
+                $"DPI(Raw/Eff/Ang): {StaticStuff.GetDpi(S.screen, DpiType.Raw)}/{DPIEffective}/{StaticStuff.GetDpi(S.screen, DpiType.Angular)}  "+
                 $"Screen Scaling: {Math.Round(DPIEffective/96.0*100)}%   \r"); //  {S.DeviceName}     \r");
             ++i;
         }
@@ -336,7 +261,7 @@ public class SnagScreen
         if(Dir.X != 0) {
             // Find closest Left- or Right-most screen, in Y direction.
             foreach(var S in (Dir.X==1 ? LeftMost : RightMost)) {
-                int dist = Math.Abs(OutsideYDistance(S.R, Cursor));
+                int dist = Math.Abs(StaticStuff.OutsideYDistance(S.R, Cursor));
                 if(dist < DistClosest) {
                     DistClosest = dist;
                     WS = S;
@@ -365,14 +290,14 @@ public class MouseUnSnag
     IntPtr ThisModHandle = IntPtr.Zero;
     int NJumps = 0;
 
-    private IntPtr SetHook (int HookNum, HookProc proc)
+    private IntPtr SetHook (int HookNum, User32.HookProc proc)
     {
         using (Process curProcess = Process.GetCurrentProcess ())
         using (ProcessModule curModule = curProcess.MainModule)
         {
             if (ThisModHandle == IntPtr.Zero)
-                ThisModHandle = GetModuleHandle (curModule.ModuleName);
-            return SetWindowsHookEx (HookNum, proc, ThisModHandle, 0);
+                ThisModHandle = Kernel32.GetModuleHandle (curModule.ModuleName);
+            return User32.SetWindowsHookEx (HookNum, proc, ThisModHandle, 0);
         }
     }
 
@@ -381,7 +306,7 @@ public class MouseUnSnag
         if (hookHand == IntPtr.Zero)
             return;
 
-        UnhookWindowsHookEx (hookHand);
+        User32.UnhookWindowsHookEx (hookHand);
         hookHand = IntPtr.Zero;
     }
 
@@ -402,11 +327,11 @@ public class MouseUnSnag
         NewCursor = cursor; // Default is to not move cursor.
 			
         // Gather pertinent information about cursor, mouse, screens.
-        Point Dir = Direction (cursor, mouse);
-        SnagScreen cursorScreen = WhichScreen (cursor);
-        SnagScreen mouseScreen = WhichScreen (mouse);
+        Point Dir = StaticStuff.Direction (cursor, mouse);
+        SnagScreen cursorScreen = SnagScreen.WhichScreen (cursor);
+        SnagScreen mouseScreen = SnagScreen.WhichScreen (mouse);
         bool IsStuck = (cursor != LastMouse) && (mouseScreen != cursorScreen);
-        Point StuckDirection = OutsideDirection (cursorScreen.R, mouse);
+        Point StuckDirection = StaticStuff.OutsideDirection (cursorScreen.R, mouse);
 
         string StuckString = IsStuck ? "--STUCK--" : "         ";
 		
@@ -414,7 +339,7 @@ public class MouseUnSnag
 //            $"mouse:{mouse}  cursor:{cursor} (OnMon#{cursorScreen}/{mouseScreen}) last:{LastMouse}  " +
 //            $"#UnSnags {NJumps}   {StuckString}        \r");
 
-        Console.Write ($" StuckDirection/Distance{StuckDirection}/{OutsideDistance(cursorScreen.R, mouse)} " +
+        Console.Write ($" StuckDirection/Distance{StuckDirection}/{StaticStuff.OutsideDistance(cursorScreen.R, mouse)} " +
             $"cur_mouse:{mouse}  prev_mouse:{LastMouse} ==? cursor:{cursor} (OnMon#{cursorScreen}/{mouseScreen})  " +
             $"#UnSnags {NJumps}   {StuckString}   \r");
 
@@ -424,7 +349,7 @@ public class MouseUnSnag
         if (!IsStuck)
             return false;
 
-        SnagScreen jumpScreen = ScreenInDirection (StuckDirection, cursorScreen.R);
+        SnagScreen jumpScreen = SnagScreen.ScreenInDirection (StuckDirection, cursorScreen.R);
 
         // If the mouse "location" (which can take on a value beyond the current
         // cursor screen) has a value, then it is "within" another valid screen
@@ -439,7 +364,7 @@ public class MouseUnSnag
         }
         else if (StuckDirection.X != 0)
         {
-            NewCursor = WrapPoint (StuckDirection, cursor);
+            NewCursor = SnagScreen.WrapPoint (StuckDirection, cursor);
         }
         else
             return false;
@@ -454,24 +379,24 @@ public class MouseUnSnag
     // position, to make it jump from one monitor to another.
     private IntPtr LLMouseHookCallback (int nCode, uint wParam, IntPtr lParam)
     {
-        if ((nCode < 0) || (wParam != WM_MOUSEMOVE) || UpdatingDisplaySettings)
+        if ((nCode < 0) || (wParam != User32.WM_MOUSEMOVE) || UpdatingDisplaySettings)
             goto ExitToNextHook;
 
-        var hookStruct = (MSLLHOOKSTRUCT) Marshal.PtrToStructure (lParam, typeof (MSLLHOOKSTRUCT));
+        var hookStruct = (StaticStuff.MSLLHOOKSTRUCT) Marshal.PtrToStructure (lParam, typeof (StaticStuff.MSLLHOOKSTRUCT));
         Point mouse = hookStruct.pt;
 
         // If we jump the cursor, then we return 1 here to tell the OS that we
         // have handled the message, so it doesn't call SetCursorPos() right
         // after we do, and "undo" our call to SetCursorPos().
-        if (GetCursorPos(out Point cursor) && CheckJumpCursor (mouse, cursor, out Point NewCursor)) {
-            SetCursorPos(NewCursor);
+        if (User32.GetCursorPos(out Point cursor) && CheckJumpCursor (mouse, cursor, out Point NewCursor)) {
+            StaticStuff.SetCursorPos(NewCursor);
             return (IntPtr) 1;
         }
 
         // Default is to let the OS handle the mouse events, when "return" does not happen in
         // if() clause above.
         ExitToNextHook:
-            return CallNextHookEx (LLMouse_hookhand, nCode, wParam, lParam);
+            return User32.CallNextHookEx (LLMouse_hookhand, nCode, wParam, lParam);
     }
 
     bool UpdatingDisplaySettings=false;
@@ -486,10 +411,10 @@ public class MouseUnSnag
     }
 
     // Need to explicitly keep a reference to this, so it does not get "garbage collected."
-    private HookProc MouseHookDelegate = null;
+    private User32.HookProc MouseHookDelegate = null;
 
     // Catch program CTRL-C termination, and unhook the mouse event.
-    private ConsoleEventDelegate CTRL_C_handler;
+    private Kernel32.ConsoleEventDelegate CTRL_C_handler;
     private bool ConsoleEventCallback (int eventType)
     {
         Console.Write ("\nIn ConsoleEventCallback, Unhooking mouse events...");
@@ -505,7 +430,7 @@ public class MouseUnSnag
         // physical pixels anyway, so we just ignore if the call fails.
         try
         {
-            SetProcessDpiAwareness (PROCESS_DPI_AWARENESS.Process_Per_Monitor_DPI_Aware);
+            SHCore.SetProcessDpiAwareness (PROCESS_DPI_AWARENESS.Process_Per_Monitor_DPI_Aware);
         }
         catch (System.DllNotFoundException)
         {
@@ -513,8 +438,8 @@ public class MouseUnSnag
         }
 
         // Make sure we catch CTRL-C hard-exit of program.
-        CTRL_C_handler = new ConsoleEventDelegate (ConsoleEventCallback);
-        SetConsoleCtrlHandler (CTRL_C_handler, true);
+        CTRL_C_handler = new Kernel32.ConsoleEventDelegate(ConsoleEventCallback);
+        Kernel32.SetConsoleCtrlHandler (CTRL_C_handler, true);
 
         //ShowScreens ();
         SnagScreen.Init (Screen.AllScreens);
@@ -527,7 +452,7 @@ public class MouseUnSnag
 
         // Keep a reference to the delegate, so it does not get garbage collected.
         MouseHookDelegate = LLMouseHookCallback;
-        LLMouse_hookhand = SetHook (WH_MOUSE_LL, MouseHookDelegate);
+        LLMouse_hookhand = SetHook (User32.WH_MOUSE_LL, MouseHookDelegate);
 
         Console.WriteLine ("");
 
@@ -552,4 +477,5 @@ public class MouseUnSnag
         var MUS = new MouseUnSnag ();
         MUS.Run (args);
     }
+}
 }
