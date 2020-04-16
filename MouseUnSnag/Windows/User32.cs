@@ -9,6 +9,7 @@ namespace MouseUnSnag.Windows
 	/// </summary>
 	public static class User32
 	{
+		public const uint MONITOR_DEFAULTTONEAREST = 2;
 		public const int SW_HIDE = 0;
 		public const int SW_SHOW = 5;
 		public const int WH_MOUSE_LL = 14; // Win32 low-level mouse event hook ID.

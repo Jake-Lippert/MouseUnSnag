@@ -15,7 +15,7 @@ namespace MouseUnSnag
 			}
 			else
 			{
-				new MouseEvents().Run(args);
+				new MouseEvents().Run();
 			}
 		}
 	}
